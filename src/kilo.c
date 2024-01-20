@@ -33,7 +33,7 @@ void die(const char *s) {
 }
 
 void disableRawMode() {
-  if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1) 
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1) 
     die("tcsetattr");
 }
 
@@ -61,11 +61,31 @@ char editorReadKey() {
   return c;
 }
 
+int getCursorPosition(int *rows, int *cols) {
+  char buf[32];
+  unsigned int i = 0;
+
+  if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
+
+  while (i < sizeof(buf) -1) {
+    if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
+    if (buf[i] == 'R') break;
+    i++;
+  }
+  buf[i] = '\0';
+
+  if (buf[0] != '\x1b' || buf[1] != '[') return -1;
+  if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
+
+  return 0;
+}
+
 int getWindowSize(int *rows, int *cols) {
   struct winsize ws;
 
-  if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-    return -1;
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+    if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+    return getCursorPosition(rows, cols);
   } else {
     *cols = ws.ws_col;
     *rows = ws.ws_row;
@@ -78,7 +98,11 @@ int getWindowSize(int *rows, int *cols) {
 void editorDrawRows() {
   int y;
   for (y = 0; y < E.screenrows; y++) {
-    write(STDOUT_FILENO, "~\r\n", 3);
+    write(STDOUT_FILENO, "~\r\n", 1);
+
+    if (y < E.screenrows -1) {
+      write(STDOUT_FILENO, "\r\n", 2);
+    }
   }
 }
 
